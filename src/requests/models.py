@@ -219,6 +219,9 @@ class RequestEncodingMixin:
                     )
 
         for k, v in files:
+            if not isinstance(k, str):
+                raise TypeError("File field names must be strings.")
+
             # support for explicit filename
             ft = None
             fh = None

@@ -1899,6 +1899,58 @@ class TestRequests:
 
         assert "multipart/form-data" in p.headers["Content-Type"]
 
+    @pytest.mark.parametrize("field_name", (1, True, 1.5, None, b"file", ("file",)))
+    @pytest.mark.parametrize("as_mapping", (True, False))
+    def test_multipart_rejects_non_string_file_field_names(
+        self, field_name, as_mapping
+    ):
+        stream = io.BytesIO(b"file contents")
+        files = [(field_name, ("example.txt", stream))]
+        if as_mapping:
+            files = dict(files)
+
+        with pytest.raises(TypeError, match="File field names must be strings"):
+            requests.Request(
+                "POST", "https://example.invalid/upload", files=files
+            ).prepare()
+
+        assert stream.tell() == 0
+
+    @pytest.mark.parametrize(
+        "field_name, disposition",
+        (
+            ("file", 'name="file"'),
+            ("élixir", 'name="élixir"'),
+            ("", 'name=""'),
+        ),
+    )
+    @pytest.mark.parametrize("as_mapping", (True, False))
+    def test_multipart_accepts_string_file_field_names(
+        self, field_name, disposition, as_mapping
+    ):
+        files = [(field_name, ("example.txt", b"file contents"))]
+        if as_mapping:
+            files = dict(files)
+
+        prepared = requests.Request(
+            "POST", "https://example.invalid/upload", files=files
+        ).prepare()
+
+        assert disposition in prepared.body.decode("utf-8")
+        assert b"file contents" in prepared.body
+
+    def test_multipart_accepts_string_subclass_file_field_name(self):
+        class FieldName(str):
+            pass
+
+        prepared = requests.Request(
+            "POST",
+            "https://example.invalid/upload",
+            files={FieldName("file"): ("example.txt", b"file contents")},
+        ).prepare()
+
+        assert b'name="file"' in prepared.body
+
     def test_autoset_header_values_are_native(self, httpbin):
         data = "this is a string"
         length = "16"
